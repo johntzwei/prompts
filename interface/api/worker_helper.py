@@ -1,3 +1,4 @@
+from typing import List
 import torch
 from transformers import AutoModelWithLMHead, AutoTokenizer
 
@@ -12,8 +13,9 @@ def init():
 
     softmax = torch.nn.Softmax()
 
-def inference(inputs, choices=['yes','no']):
+def inference(inputs: str, choices: List[str]):
     # tokenize the choices
+    # starting symbols should be added by tokenizer
     tokenized_choices = []
     for choice in choices:
         c = tokenizer(choice).input_ids
