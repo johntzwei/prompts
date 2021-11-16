@@ -1,0 +1,3 @@
+collection/.venv/*
+collection/state/*
+*.pyc
