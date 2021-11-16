@@ -1,6 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from model import Model
+from pydantic import BaseModel
+
+
+class PromptData(BaseModel):
+    prompt: str
+
 
 app = FastAPI()
 
@@ -8,6 +14,7 @@ model = Model("distilgpt2")
 
 origins = [
     "http://localhost:3000",
+    "http://localhost:8501",
 ]
 
 app.add_middleware(
@@ -20,12 +27,14 @@ app.add_middleware(
 
 
 @app.get("/")
-async def root():
+def root():
     return {"message": "HOLLAAAAA"}
 
 
-@app.get("/evaluate-prompt/{prompt}")
-async def evaluate_prompt(prompt):
+@app.post("/evaluate-prompt/")
+def evaluate_prompt(data: PromptData):
+    prompt = data.prompt
+    # TODO: switch out dummy model and result
     res = model.evaluate(prompt)
-    return {"Prompt": prompt,
-            "Result": res}
+    return {"prompt": prompt,
+            "result": res}
