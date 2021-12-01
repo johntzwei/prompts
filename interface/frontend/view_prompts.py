@@ -1,7 +1,9 @@
 import json
 import itertools
 import textwrap
+import time
 from multiprocessing import Manager, Pool
+import threading
 
 import numpy as np
 import pandas as pd
@@ -26,21 +28,93 @@ from promptsource.utils import (
     render_features,
 )
 
-def main(state, dataset, LABEL_FIELD = 'label'):
-    db = TinyDB('db.json') 
-    print(len(db))
+from data_collection import show_jinja, show_text
 
-    step = st.selectbox('How many to display on this page?', (10, 20, 40, 80))
-    start = st.slider('Database index', min_value=0, max_value=len(db), step=step)
+template_column = lambda template: 'prompt:%s' % template.name
 
-    end = start + step
-    st.write('Showing rows %d to %d:' % (start, end))
-    for i, row in enumerate(itertools.islice(db, start, end)):
-        st.write('index: ', (start + i))
+def label(db, template, idx):
+    print('Labelling %s on example %d' % (template.name, idx))
+    # run api here
+    api = lambda x : 'result'
+    result = api('')
+    d = {}
+    d[template_column(template)] = result
+    db.update(d, Query().idx == idx)
 
-        ex = dataset[row['idx']].copy()
-        del(ex[LABEL_FIELD])
-        st.write(ex)
+def labelling_thread(db, templates):
+    try:
+        print('Started thread...')
+        for template in templates:
+            ex = Query()
+            hits = db.search(~ex[template_column(template)].exists())
 
-        st.write(row)
-        st.markdown("""---""")
+            print('%s, %d' % (template.name, len(hits)))
+            for hit in hits:
+                label(db, template, hit['idx'])
+                time.sleep(1)
+    finally:
+        print('Ending thread.')
+
+def main(state, dataset, dataset_templates, db, LABEL_FIELD = 'label'):
+    # View one template
+    st.header('Prompt viewer')
+
+    name = st.selectbox(
+        label="Choose a prompt to view",
+        options=dataset_templates.all_template_names,
+        index=0,
+        key="prompt_select",
+    )
+
+    template = dataset_templates[name] 
+    st.write('Jinja:')
+    show_jinja(template.jinja)
+    st.write('Answer choices:')
+    if template.answer_choices:
+        st.write(template.answer_choices.split(' ||| '))
+    else:
+        st.write(None)
+
+    total = len(db)
+
+    st.markdown('---')
+    st.header('Prompt labelling')
+    if state['labelling_thread']:
+        if state['labelling_thread'].is_alive():
+            status = 'running'
+        else:
+            # dead thread
+            state['labelling_thread'] = None
+            status = 'idle'
+    else:
+        status = 'idle'
+    st.write('Labelling status: %s' % status)
+
+    df = []
+    for n in dataset_templates.all_template_names:
+        col = template_column(dataset_templates[n])
+        ex = Query()
+        hits = db.search(ex[col] != None)
+        labelled_num = len(hits)
+        df.append((n, labelled_num))
+
+    df = pd.DataFrame(df, columns=['Prompt', 'Labelled examples'])
+    st.write(df)
+    refresh = st.button("Update")
+
+    st.markdown('---')
+    st.header('Start labelling')
+    run_prompt = st.button("Start selected prompt")
+    run_all_prompts = st.button("Start all prompts")
+    stop_prompt = st.button("Stop labelling")
+
+    if run_prompt:
+        if state['labelling_thread'] is None:
+            # start a process
+            this_template = dataset_templates[name]
+
+            thread = threading.Thread(target=labelling_thread, args=(db, [this_template]))
+            state['labelling_thread'] = thread
+            thread.start()
+        else:
+            st.error('Already running!')
