@@ -14,6 +14,8 @@ from pygments import highlight
 from pygments.formatters import HtmlFormatter
 from pygments.lexers import DjangoLexer
 
+from tinydb import TinyDB, Query
+
 from promptsource.session import _get_state
 from promptsource.templates import DatasetTemplates, Template, TemplateCollection
 from promptsource.utils import (
@@ -50,6 +52,10 @@ get_dataset = st.cache(allow_output_mutation=True)(get_dataset)
 get_dataset_confs = st.cache(get_dataset_confs)
 list_datasets = st.cache(list_datasets)
 
+def get_database():
+    db = TinyDB('db.json') 
+    return db
+get_database = st.cache(allow_output_mutation=True)(get_database)
 
 #
 # Loads session state
@@ -79,23 +85,6 @@ st.markdown(
     "<style>" + HtmlFormatter(style="friendly").get_style_defs(".highlight") + "</style>", unsafe_allow_html=True
 )
 
-WIDTH = 80
-
-
-def show_jinja(t, width=WIDTH):
-    wrap = textwrap.fill(t, width=width, replace_whitespace=False)
-    out = highlight(wrap, DjangoLexer(), HtmlFormatter())
-    st.write(out, unsafe_allow_html=True)
-
-
-def show_text(t, width=WIDTH, with_markdown=False):
-    wrap = [textwrap.fill(subt, width=width, replace_whitespace=False) for subt in t.split("\n")]
-    wrap = "\n".join(wrap)
-    if with_markdown:
-        st.write(wrap, unsafe_allow_html=True)
-    else:
-        st.text(wrap)
-
 
 # Combining mode `Prompted dataset viewer` and `Sourcing` since the
 # backbone of the interfaces is the same
@@ -120,6 +109,11 @@ dataset_key = st.sidebar.selectbox(
     index=ag_news_index,
     help="Select the dataset to work on.",
 )
+
+#
+# datapoint database
+#
+db = get_database()
 
 #
 # If a particular dataset is selected, loads dataset and template information
@@ -163,162 +157,25 @@ if dataset_key is not None:
         + f": **{str(num_templates)}**"
     )
 
+    num_datapoints = len(db)
+    st.sidebar.write(
+        "No of points collected for "
+        + f"`{dataset_key + (('/' + conf_option.name) if conf_option else '')}`"
+        + f": **{str(num_datapoints)}**"
+    )
+
     st.sidebar.subheader("Dataset Schema")
     rendered_features = render_features(dataset.features)
     st.sidebar.write(rendered_features)
-
 
     #
     # Body of the app: display prompted examples in mode `Prompted dataset viewer`
     # or text boxes to create new prompts in mode `Sourcing`
     #
-    LABEL_FIELD = 'label'
-    LABEL_FILE = 'labels.jsonl'
 
     if mode == "Data collection":
-        # write one example to main
-        st.markdown("## Strategy: `%s`, label field: `%s`" % ('random', LABEL_FIELD))
-
-        col1, col2 = st.beta_columns(2)
-        with col1:
-            request_next_point = st.button("Sample new point")
-
-            if request_next_point or state['point_idx'] is None:
-                strategy = lambda : np.random.randint(0, len(dataset)-1)
-                idx = strategy()
-                state.point_idx = idx
-            else:
-                idx = state.point_idx
-
-            example = dataset[idx]
-            example = removeHyphen(example)
-
-            nolabel_example = example.copy()
-            del(nolabel_example[LABEL_FIELD])
-            st.write('idx: ', idx)
-            st.write(nolabel_example)
-
-
-        with col2:
-            # annotation guidelines
-            datapoint_guideline = """
-            Data point annotation guidelines here.
-            """
-            st.markdown(datapoint_guideline)
-
-            with st.form("new_datapoint_form"):
-                selected_label = st.selectbox('What is the label of the data point?',
-                        dataset.features[LABEL_FIELD].names)
-                new_point_submitted = st.form_submit_button("Save label")
-
-            if new_point_submitted:
-                # are file writes atomic? should be...
-                label_dict = {'idx' : idx, LABEL_FIELD : selected_label, 'annotator' : 'jw'}
-                labels = open(LABEL_FILE, 'at')
-                labels.write(json.dumps(label_dict) + '\n')
-                labels.close()
-
-                # refresh label
-                state['point_idx'] = None
-
-
-        st.markdown('## Write a template!')
-        template_guideline = """
-        Template annotation guidelines here.
-        """
-        st.markdown(template_guideline)
-
-        with st.form("try_template_form"):
-            answer_choices = st.text_input(
-                "Answer Choices",
-                help="A Jinja expression for computing answer choices. "
-                "Separate choices with spaces and a triple bar ( ||| ).",
-            )
-
-            # Jinja
-            jinja = st.text_area("Template", 
-                    height=40,
-                    help="Here's an example: To which category does this article belong? {{text}}"
-            )
-
-
-            st.markdown('### API hostname: `%s`' % '10.136.17.32:8000/')
-            test_submit_button = st.form_submit_button('Test template')
-
-        if test_submit_button:
-            template = Template('test', jinja, "jw")
-            applied_template = template.apply(example)[0]
-
-            choices = answer_choices.split(' ||| ')
-
-            r = requests.get('http://10.136.17.32:8000/', 
-                    params={'inputs' : applied_template, 'choices' : json.dumps(choices)})
-            probs = json.loads(r.content)
-
-            st.write(r.url)
-
-            col1, col2 = st.beta_columns(2)
-            with col1:
-                st.write('Input:')
-                st.write(applied_template)
-                st.write(choices)
-
-            with col2:
-                st.write('Output:')
-                st.write(sorted(zip(choices, probs), key=lambda x: -x[1]))
-
-            #
-            # only display saving window if tested
-            #
-            st.markdown('## Save template')
-            with st.form("save_template_form"):
-
-                template = Template("no_name", "", "")
-
-                new_template_name = st.text_input(
-                    "Template name",
-                    help="Choose a descriptive name for the template below."
-                )
-
-                # Metadata
-                original_task = st.checkbox(
-                    "Original Task?",
-                    help="Prompt asks model to perform the original task designed for this dataset.",
-                )
-                choices_in_prompt = st.checkbox(
-                    "Choices in Template?",
-                    help="Prompt explicitly lists choices in the template for the output.",
-                )
-
-                new_template_submitted = st.form_submit_button("Save template")
-                if new_template_submitted:
-                    if new_template_name in dataset_templates.all_template_names:
-                        st.error(
-                            f"A prompt with the name {new_template_name} already exists "
-                            f"for dataset {state.templates_key}!"
-                        )
-                    elif new_template_name == "":
-                        st.error("Need to provide a prompt name!")
-                    else:
-                        template = Template(new_template_name, jinja, "jw")
-                        dataset_templates.add_template(template)
-
-        #
-        # Display dataset information
-        #
-        st.header("Dataset: " + dataset_key + " " + (("/ " + conf_option.name) if conf_option else ""))
-
-
-        st.markdown(
-            "*Homepage*: "
-            + dataset.info.homepage
-            + "\n\n*Dataset*: https://github.com/huggingface/datasets/blob/master/datasets/%s/%s.py"
-            % (dataset_key, dataset_key)
-        )
-
-        md = """
-        %s
-        """ % (
-            dataset.info.description.replace("\\", "") if dataset_key else ""
-        )
-        st.markdown(md)
+        from data_collection import main
+        main(state, db, dataset, dataset_key, split, conf_option)
+    if mode == "View data":
+        from view_data import main
+        main(state, dataset)
