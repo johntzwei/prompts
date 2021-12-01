@@ -39,10 +39,10 @@ parser.add_argument("-r", "--read-only", action="store_true", help="whether to r
 
 args = parser.parse_args()
 if args.read_only:
-    select_options = ["View data"]
+    select_options = ["View data", "View prompts"]
     side_bar_title_prefix = "Promptsource (Read only)"
 else:
-    select_options = ["Data collection", "View data"]
+    select_options = ["Data collection", "View data", "View prompts"]
     side_bar_title_prefix = "USC"
 
 #
@@ -88,7 +88,7 @@ st.markdown(
 
 # Combining mode `Prompted dataset viewer` and `Sourcing` since the
 # backbone of the interfaces is the same
-assert mode in ["Data collection", "View data"], ValueError(
+assert mode in ["Data collection", "View data", "View prompts"], ValueError(
     f"`mode` ({mode}) should be in `[Data collection, View data]`"
 )
 
@@ -149,6 +149,24 @@ if dataset_key is not None:
         )
         st.stop()
 
+    #
+    # Body of the app: display prompted examples in mode `Prompted dataset viewer`
+    # or text boxes to create new prompts in mode `Sourcing`
+    #
+
+    if mode == "Data collection":
+        from data_collection import main
+        main(state, db, dataset, dataset_key, split, conf_option)
+    if mode == "View data":
+        from view_data import main
+        main(state, dataset, db)
+    if mode == "View prompts":
+        from view_prompts import main
+        main(state, dataset, dataset_templates, db)
+
+    #
+    # sidebar
+    #
     template_list = dataset_templates.all_template_names
     num_templates = len(template_list)
     st.sidebar.write(
@@ -168,14 +186,4 @@ if dataset_key is not None:
     rendered_features = render_features(dataset.features)
     st.sidebar.write(rendered_features)
 
-    #
-    # Body of the app: display prompted examples in mode `Prompted dataset viewer`
-    # or text boxes to create new prompts in mode `Sourcing`
-    #
 
-    if mode == "Data collection":
-        from data_collection import main
-        main(state, db, dataset, dataset_key, split, conf_option)
-    if mode == "View data":
-        from view_data import main
-        main(state, dataset)

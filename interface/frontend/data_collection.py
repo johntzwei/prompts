@@ -85,9 +85,9 @@ def main(state, db, dataset, dataset_key, split, conf_option, LABEL_FIELD = 'lab
         st.write('idx: ', idx)
         st.write(nolabel_example)
 
-    st.markdown('## Write a template!')
+    st.markdown('## Write a prompt!')
     template_guideline = """
-    Template annotation guidelines here.
+    Prompt annotation guidelines here.
     """
     st.markdown(template_guideline)
 
@@ -99,72 +99,75 @@ def main(state, db, dataset, dataset_key, split, conf_option, LABEL_FIELD = 'lab
         )
 
         # Jinja
-        jinja = st.text_area("Template", 
+        jinja = st.text_area("Prompt", 
                 height=40,
                 help="Here's an example: To which category does this article belong? {{text}}"
         )
 
 
         st.markdown('### API hostname: `%s`' % '10.136.17.32:8000/')
-        test_submit_button = st.form_submit_button('Test template')
+        test_submit_button = st.form_submit_button('Test prompt')
 
     if test_submit_button:
-        template = Template('test', jinja, "jw", answer_choices=answer_choices)
-        applied_template = template.apply(example)[0]
+        if answer_choices == '':
+            st.error('Enter your answer choices first!')
+        else:
+            template = Template('test', jinja, "jw", answer_choices=answer_choices)
+            applied_template = template.apply(example)[0]
 
-        choices = answer_choices.split(' ||| ')
+            choices = answer_choices.split(' ||| ')
 
-        r = requests.get('http://10.136.17.32:8000/', 
-                params={'inputs' : applied_template, 'choices' : json.dumps(choices)})
-        probs = json.loads(r.content)
+            r = requests.get('http://10.136.17.32:8000/', 
+                    params={'inputs' : applied_template, 'choices' : json.dumps(choices)})
+            probs = json.loads(r.content)
 
-        st.write(r.url)
+            st.write(r.url)
 
-        col1, col2 = st.beta_columns(2)
-        with col1:
-            st.write('Input:')
-            show_text(applied_template)
-            st.write(choices)
+            col1, col2 = st.beta_columns(2)
+            with col1:
+                st.write('Input:')
+                show_text(applied_template)
+                st.write(choices)
 
-        with col2:
-            st.write('Output:')
-            st.write(sorted(zip(choices, probs), key=lambda x: -x[1]))
+            with col2:
+                st.write('Output:')
+                st.write(sorted(zip(choices, probs), key=lambda x: -x[1]))
 
-        #
-        # only display saving window if tested
-        #
-        st.markdown('## Save template')
-        with st.form("save_template_form"):
+            #
+            # only display saving window if tested
+            #
+            st.markdown('## Save prompt')
+            with st.form("save_template_form"):
 
-            template = Template("no_name", "", "")
+                template = Template("no_name", "", "")
 
-            new_template_name = st.text_input(
-                "Template name",
-                help="Choose a descriptive name for the template below."
-            )
+                new_template_name = st.text_input(
+                    "Prompt name",
+                    help="Choose a descriptive name for the prompt below."
+                )
 
-            # Metadata
-            original_task = st.checkbox(
-                "Original Task?",
-                help="Prompt asks model to perform the original task designed for this dataset.",
-            )
-            choices_in_prompt = st.checkbox(
-                "Choices in Template?",
-                help="Prompt explicitly lists choices in the template for the output.",
-            )
+                # Metadata
+                original_task = st.checkbox(
+                    "Original Task?",
+                    help="Prompt asks model to perform the original task designed for this dataset.",
+                )
+                choices_in_prompt = st.checkbox(
+                    "Choices in Prompt?",
+                    help="Prompt explicitly lists choices in the prompt for the output.",
+                )
 
-            new_template_submitted = st.form_submit_button("Save template")
-            if new_template_submitted:
-                if new_template_name in dataset_templates.all_template_names:
-                    st.error(
-                        f"A prompt with the name {new_template_name} already exists "
-                        f"for dataset {state.templates_key}!"
-                    )
-                elif new_template_name == "":
-                    st.error("Need to provide a prompt name!")
-                else:
-                    template = Template(new_template_name, jinja, "jw", answer_choices=answer_choices)
-                    dataset_templates.add_template(template)
+                new_template_submitted = st.form_submit_button("Save prompt")
+                if new_template_submitted:
+                    if new_template_name in dataset_templates.all_template_names:
+                        st.error(
+                            f"A prompt with the name {new_template_name} already exists "
+                            f"for dataset {state.templates_key}!"
+                        )
+                    elif new_template_name == "":
+                        st.error("Need to provide a prompt name!")
+                    else:
+                        template = Template(new_template_name, jinja, "jw", answer_choices=answer_choices)
+                        dataset_templates.add_template(template)
 
     #
     # Display dataset information

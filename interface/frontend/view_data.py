@@ -26,17 +26,14 @@ from promptsource.utils import (
     render_features,
 )
 
-def main(state, dataset, LABEL_FIELD = 'label'):
-    db = TinyDB('db.json') 
-    print(len(db))
-
+def main(state, dataset, db, LABEL_FIELD = 'label'):
     step = st.selectbox('How many to display on this page?', (10, 20, 40, 80))
     start = st.slider('Database index', min_value=0, max_value=len(db), step=step)
 
     end = start + step
     st.write('Showing rows %d to %d:' % (start, end))
     for i, row in enumerate(itertools.islice(db, start, end)):
-        st.write('index: ', i)
+        st.write('index: ', (start + i))
 
         ex = dataset[row['idx']].copy()
         del(ex[LABEL_FIELD])

@@ -75,7 +75,22 @@ def main(state, dataset, dataset_templates, db, LABEL_FIELD = 'label'):
     else:
         st.write(None)
 
-    total = len(db)
+    st.markdown('---')
+    st.header('Start labelling')
+    run_prompt = st.button("Start selected prompt")
+    run_all_prompts = st.button("Start all prompts")
+    stop_prompt = st.button("Stop labelling")
+
+    if run_prompt:
+        if state['labelling_thread'] is None:
+            # start a process
+            this_template = dataset_templates[name]
+
+            thread = threading.Thread(target=labelling_thread, args=(db, [this_template]))
+            state['labelling_thread'] = thread
+            thread.start()
+        else:
+            st.error('Already running!')
 
     st.markdown('---')
     st.header('Prompt labelling')
@@ -101,20 +116,3 @@ def main(state, dataset, dataset_templates, db, LABEL_FIELD = 'label'):
     df = pd.DataFrame(df, columns=['Prompt', 'Labelled examples'])
     st.write(df)
     refresh = st.button("Update")
-
-    st.markdown('---')
-    st.header('Start labelling')
-    run_prompt = st.button("Start selected prompt")
-    run_all_prompts = st.button("Start all prompts")
-    stop_prompt = st.button("Stop labelling")
-
-    if run_prompt:
-        if state['labelling_thread'] is None:
-            # start a process
-            this_template = dataset_templates[name]
-
-            thread = threading.Thread(target=labelling_thread, args=(db, [this_template]))
-            state['labelling_thread'] = thread
-            thread.start()
-        else:
-            st.error('Already running!')
