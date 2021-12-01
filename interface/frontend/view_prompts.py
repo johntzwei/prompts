@@ -58,6 +58,7 @@ def labelling_thread(db, templates):
 def main(state, dataset, dataset_templates, db, LABEL_FIELD = 'label'):
     # View one template
     st.header('Prompt viewer')
+    st.write(dataset_templates.folder_path)
 
     name = st.selectbox(
         label="Choose a prompt to view",

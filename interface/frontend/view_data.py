@@ -28,7 +28,7 @@ from promptsource.utils import (
 
 def main(state, dataset, db, LABEL_FIELD = 'label'):
     step = st.selectbox('How many to display on this page?', (10, 20, 40, 80))
-    start = st.slider('Database index', min_value=0, max_value=len(db), step=step)
+    start = st.slider('Database index', min_value=0, max_value=len(db)+1, step=step)
 
     end = start + step
     st.write('Showing rows %d to %d:' % (start, end))

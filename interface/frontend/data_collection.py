@@ -43,7 +43,7 @@ def show_text(t, width=WIDTH, with_markdown=False):
 
 
 
-def main(state, db, dataset, dataset_key, split, conf_option, LABEL_FIELD = 'label'):
+def main(state, db, dataset, dataset_key, split, conf_option, dataset_templates, LABEL_FIELD = 'label'):
     # write one example to main
     st.markdown("## Strategy: `%s`, label field: `%s`" % ('random', LABEL_FIELD))
 
@@ -108,7 +108,10 @@ def main(state, db, dataset, dataset_key, split, conf_option, LABEL_FIELD = 'lab
         st.markdown('### API hostname: `%s`' % '10.136.17.32:8000/')
         test_submit_button = st.form_submit_button('Test prompt')
 
-    if test_submit_button:
+    if test_submit_button or state['tested']:
+        # for the second menu
+        state['tested'] = True
+
         if answer_choices == '':
             st.error('Enter your answer choices first!')
         else:
@@ -132,6 +135,7 @@ def main(state, db, dataset, dataset_key, split, conf_option, LABEL_FIELD = 'lab
             with col2:
                 st.write('Output:')
                 st.write(sorted(zip(choices, probs), key=lambda x: -x[1]))
+
 
             #
             # only display saving window if tested
@@ -168,6 +172,8 @@ def main(state, db, dataset, dataset_key, split, conf_option, LABEL_FIELD = 'lab
                     else:
                         template = Template(new_template_name, jinja, "jw", answer_choices=answer_choices)
                         dataset_templates.add_template(template)
+    else:
+        state['tested'] = None
 
     #
     # Display dataset information

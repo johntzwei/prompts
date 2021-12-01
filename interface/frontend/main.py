@@ -156,7 +156,7 @@ if dataset_key is not None:
 
     if mode == "Data collection":
         from data_collection import main
-        main(state, db, dataset, dataset_key, split, conf_option)
+        main(state, db, dataset, dataset_key, split, conf_option, dataset_templates)
     if mode == "View data":
         from view_data import main
         main(state, dataset, db)
