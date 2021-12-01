@@ -183,8 +183,12 @@ if dataset_key is not None:
         with col1:
             request_next_point = st.button("Sample new point")
 
-            strategy = lambda : np.random.randint(0, len(dataset)-1)
-            idx = strategy()
+            if request_next_point or state['point_idx'] is None:
+                strategy = lambda : np.random.randint(0, len(dataset)-1)
+                idx = strategy()
+                state.point_idx = idx
+            else:
+                idx = state.point_idx
 
             example = dataset[idx]
             example = removeHyphen(example)
@@ -205,14 +209,17 @@ if dataset_key is not None:
             with st.form("new_datapoint_form"):
                 selected_label = st.selectbox('What is the label of the data point?',
                         dataset.features[LABEL_FIELD].names)
-                new_point_submitted = st.form_submit_button("Save label only")
+                new_point_submitted = st.form_submit_button("Save label")
 
             if new_point_submitted:
-                # are file writes atomic?
+                # are file writes atomic? should be...
                 label_dict = {'idx' : idx, LABEL_FIELD : selected_label, 'annotator' : 'jw'}
                 labels = open(LABEL_FILE, 'at')
                 labels.write(json.dumps(label_dict) + '\n')
                 labels.close()
+
+                # refresh label
+                state['point_idx'] = None
 
 
         st.markdown('## Write a template!')
@@ -225,85 +232,82 @@ if dataset_key is not None:
             answer_choices = st.text_input(
                 "Answer Choices",
                 help="A Jinja expression for computing answer choices. "
-                "Separate choices with a triple bar (|||).",
+                "Separate choices with spaces and a triple bar ( ||| ).",
             )
 
             # Jinja
             jinja = st.text_area("Template", 
                     height=40,
-                    help="Here's an example for ag_news: "
-                    "What label best describes this news article?\n{{text}} ||| [predict] "
+                    help="Here's an example: To which category does this article belong? {{text}}"
             )
 
 
             st.markdown('### API hostname: `%s`' % '10.136.17.32:8000/')
-            if st.form_submit_button('Test template'):
-                template = Template('test', jinja, "jw")
-                applied_template = template.apply(example)[0]
+            test_submit_button = st.form_submit_button('Test template')
 
-                choices = answer_choices.split(' ||| ')
+        if test_submit_button:
+            template = Template('test', jinja, "jw")
+            applied_template = template.apply(example)[0]
 
+            choices = answer_choices.split(' ||| ')
+
+            r = requests.get('http://10.136.17.32:8000/', 
+                    params={'inputs' : applied_template, 'choices' : json.dumps(choices)})
+            probs = json.loads(r.content)
+
+            st.write(r.url)
+
+            col1, col2 = st.beta_columns(2)
+            with col1:
                 st.write('Input:')
                 st.write(applied_template)
                 st.write(choices)
+
+            with col2:
                 st.write('Output:')
-
-                import requests
-                r = requests.get('http://10.136.17.32:8000/', 
-                        params={'inputs' : applied_template, 'choices' : json.dumps(choices)})
-                st.write(r.url)
-
-                probs = json.loads(r.content)
                 st.write(sorted(zip(choices, probs), key=lambda x: -x[1]))
 
-                # save state
-                state.jinja = jinja
-                state.answer_choices = answer_choices
+            #
+            # only display saving window if tested
+            #
+            st.markdown('## Save template')
+            with st.form("save_template_form"):
 
+                template = Template("no_name", "", "")
 
-        st.markdown('## Save template')
-        with st.form("save_template_form"):
+                new_template_name = st.text_input(
+                    "Template name",
+                    help="Choose a descriptive name for the template below."
+                )
 
-            st.markdown('jinja: `%s`' % state.jinja)
-            st.write('answer_choices: `%s`' % state.answer_choices)
+                # Metadata
+                original_task = st.checkbox(
+                    "Original Task?",
+                    help="Prompt asks model to perform the original task designed for this dataset.",
+                )
+                choices_in_prompt = st.checkbox(
+                    "Choices in Template?",
+                    help="Prompt explicitly lists choices in the template for the output.",
+                )
 
-            template = Template("no_name", "", "")
-
-            new_template_name = st.text_input(
-                "Template name",
-                help="Choose a descriptive name for the template below."
-            )
-
-            # Metadata
-            original_task = st.checkbox(
-                "Original Task?",
-                help="Prompt asks model to perform the original task designed for this dataset.",
-            )
-            choices_in_prompt = st.checkbox(
-                "Choices in Template?",
-                help="Prompt explicitly lists choices in the template for the output.",
-            )
-
-            new_template_submitted = st.form_submit_button("Save template")
-            if new_template_submitted:
-                if new_template_name in dataset_templates.all_template_names:
-                    st.error(
-                        f"A prompt with the name {new_template_name} already exists "
-                        f"for dataset {state.templates_key}!"
-                    )
-                elif new_template_name == "":
-                    st.error("Need to provide a prompt name!")
-                elif state.jinja == None:
-                    st.error("Test your prompt first!")
-                else:
-                    template = Template(new_template_name, jinja, "jw")
-                    dataset_templates.add_template(template)
-
+                new_template_submitted = st.form_submit_button("Save template")
+                if new_template_submitted:
+                    if new_template_name in dataset_templates.all_template_names:
+                        st.error(
+                            f"A prompt with the name {new_template_name} already exists "
+                            f"for dataset {state.templates_key}!"
+                        )
+                    elif new_template_name == "":
+                        st.error("Need to provide a prompt name!")
+                    else:
+                        template = Template(new_template_name, jinja, "jw")
+                        dataset_templates.add_template(template)
 
         #
         # Display dataset information
         #
         st.header("Dataset: " + dataset_key + " " + (("/ " + conf_option.name) if conf_option else ""))
+
 
         st.markdown(
             "*Homepage*: "
@@ -318,8 +322,3 @@ if dataset_key is not None:
             dataset.info.description.replace("\\", "") if dataset_key else ""
         )
         st.markdown(md)
-
-#
-# Must sync state at end
-#
-state.sync()
