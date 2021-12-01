@@ -32,7 +32,7 @@ def t5_inference(inputs: str, choices: List[str]):
     max_choice_len = max(len(i) for i in tokenized_choices)
 
     inputs = tokenizer(inputs, return_tensors="pt", max_length=512).to(device)
-    outputs = model.generate(**inputs, min_length=max_choice_len+1, max_length=max_choice_len+1, \
+    outputs = model.generate(**inputs, min_length=1, max_length=1, \
             return_dict_in_generate=True, output_scores=True)
 
     # get the scores for each of the words
