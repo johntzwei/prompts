@@ -28,20 +28,20 @@ from promptsource.utils import (
     render_features,
 )
 
-from data_collection import show_jinja, show_text
+from data_collection import show_jinja, show_text, test_template
 
 template_column = lambda template: 'prompt:%s' % template.name
 
-def label(db, template, idx):
+def label(db, template, idx, dataset):
     print('Labelling %s on example %d' % (template.name, idx))
     # run api here
-    api = lambda x : 'result'
-    result = api('')
+    url, applied_template, choices, probs = test_template(template, dataset[idx])
+
     d = {}
-    d[template_column(template)] = result
+    d[template_column(template)] = (choices, probs)
     db.update(d, Query().idx == idx)
 
-def labelling_thread(db, templates):
+def labelling_thread(db, templates, dataset):
     try:
         print('Started thread...')
         for template in templates:
@@ -50,8 +50,7 @@ def labelling_thread(db, templates):
 
             print('%s, %d' % (template.name, len(hits)))
             for hit in hits:
-                label(db, template, hit['idx'])
-                time.sleep(1)
+                label(db, template, hit['idx'], dataset)
     finally:
         print('Ending thread.')
 
@@ -77,21 +76,27 @@ def main(state, dataset, dataset_templates, db, LABEL_FIELD = 'label'):
         st.write(None)
 
     st.markdown('---')
-    st.header('Start labelling')
-    run_prompt = st.button("Start selected prompt")
-    run_all_prompts = st.button("Start all prompts")
-    stop_prompt = st.button("Stop labelling")
+    st.header('Start predicting!')
+    run_prompt = st.button("Start predicting with selected prompt")
+    run_all_prompts = st.button("Start predicting with all prompts")
+    stop_prompt = st.button("Stop background predictions")
 
-    if run_prompt:
+    if run_prompt or run_all_prompts:
+        if run_prompt:
+            this_template = dataset_templates[name]
+            all_templates = [ this_template ]
+        elif run_all_prompts:
+            all_templates = dataset_templates.templates.values()
+
+
         if state['labelling_thread'] is None:
             # start a process
-            this_template = dataset_templates[name]
-
-            thread = threading.Thread(target=labelling_thread, args=(db, [this_template]))
+            thread = threading.Thread(target=labelling_thread, args=(db, all_templates, dataset))
             state['labelling_thread'] = thread
             thread.start()
         else:
             st.error('Already running!')
+
 
     st.markdown('---')
     st.header('Prompt labelling')
@@ -104,7 +109,10 @@ def main(state, dataset, dataset_templates, db, LABEL_FIELD = 'label'):
             status = 'idle'
     else:
         status = 'idle'
+
+
     st.write('Labelling status: %s' % status)
+
 
     df = []
     for n in dataset_templates.all_template_names:

@@ -41,6 +41,16 @@ def show_text(t, width=WIDTH, with_markdown=False):
     else:
         st.text(wrap)
 
+def test_template(template, example, hostname='http://10.136.17.32:8000/'):
+    applied_template = template.apply(example)[0]
+    choices = template.answer_choices.split(' ||| ')
+
+    r = requests.get(hostname, 
+            params={'inputs' : applied_template, 'choices' : json.dumps(choices)})
+    probs = json.loads(r.content)
+
+    return r.url, applied_template, choices, probs
+
 
 
 def main(state, db, dataset, dataset_key, split, conf_option, dataset_templates, LABEL_FIELD = 'label'):
@@ -116,15 +126,8 @@ def main(state, db, dataset, dataset_key, split, conf_option, dataset_templates,
             st.error('Enter your answer choices first!')
         else:
             template = Template('test', jinja, "jw", answer_choices=answer_choices)
-            applied_template = template.apply(example)[0]
-
-            choices = answer_choices.split(' ||| ')
-
-            r = requests.get('http://10.136.17.32:8000/', 
-                    params={'inputs' : applied_template, 'choices' : json.dumps(choices)})
-            probs = json.loads(r.content)
-
-            st.write(r.url)
+            url, applied_template, choices, probs = test_template(template, example)
+            print('Made call to %s' % url)
 
             col1, col2 = st.beta_columns(2)
             with col1:
